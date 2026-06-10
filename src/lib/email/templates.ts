@@ -109,3 +109,24 @@ export function trialEndedEmail(): { subject: string; html: string } {
     `),
   };
 }
+
+export function passwordResetOtpEmail(params: {
+  otp: string;
+  expiresMinutes: number;
+}): { subject: string; html: string } {
+  const resetUrl = `${baseUrl()}/forgot-password`;
+
+  return {
+    subject: "Your Luberry AI password reset code",
+    html: layout(`
+      <h1 style="margin:0 0 16px;font-size:24px;color:#fafafa;text-align:center;">Reset your password</h1>
+      <p>Use this one-time code to verify your identity and choose a new password:</p>
+      <p style="margin:24px 0;text-align:center;">
+        <span style="display:inline-block;padding:16px 28px;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);border-radius:12px;font-size:32px;font-weight:700;letter-spacing:0.35em;color:#d4af37;">${params.otp}</span>
+      </p>
+      <p style="color:#a1a1aa;font-size:14px;text-align:center;">This code expires in <strong style="color:#e4e4e7;">${params.expiresMinutes} minutes</strong>.</p>
+      <p style="color:#71717a;font-size:13px;text-align:center;">If you didn't request this, you can ignore this email — your password won't change.</p>
+      ${cta(resetUrl, "Continue password reset")}
+    `),
+  };
+}

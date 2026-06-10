@@ -145,6 +145,18 @@ export type PrintfulOrderRow = {
   updated_at: string;
 };
 
+type PasswordResetRow = {
+  email: string;
+  otp_hash: string;
+  otp_expires_at: string;
+  otp_attempts: number;
+  last_otp_sent_at: string;
+  otp_send_count: number;
+  reset_token_hash: string | null;
+  reset_token_expires_at: string | null;
+  updated_at: string;
+};
+
 type DbShape = {
   users: DbUser[];
   companies: CompanyRow[];
@@ -163,6 +175,7 @@ type DbShape = {
     interrupt?: unknown;
     updated_at: string;
   }>;
+  password_resets: PasswordResetRow[];
 };
 
 const DEFAULT_DB: DbShape = {
@@ -175,6 +188,7 @@ const DEFAULT_DB: DbShape = {
   referral_earnings: [],
   social_posts: [],
   orchestration_sessions: [],
+  password_resets: [],
 };
 
 function dbPath() {
@@ -187,6 +201,7 @@ function parseDbShape(raw: string): DbShape {
   const json = JSON.parse(raw) as Partial<DbShape>;
   const anyJson = json as unknown as Record<string, unknown>;
   const sessionsRaw = anyJson.orchestration_sessions;
+  const resetsRaw = anyJson.password_resets;
   return {
     ...DEFAULT_DB,
     ...json,
@@ -200,6 +215,9 @@ function parseDbShape(raw: string): DbShape {
     social_posts: Array.isArray(json.social_posts) ? json.social_posts : [],
     orchestration_sessions: Array.isArray(sessionsRaw)
       ? (sessionsRaw as DbShape["orchestration_sessions"])
+      : [],
+    password_resets: Array.isArray(resetsRaw)
+      ? (resetsRaw as PasswordResetRow[])
       : [],
   };
 }
@@ -767,5 +785,92 @@ export async function dbGetOrchestrationSession(params: {
       (s) => s.thread_id === params.thread_id && s.user_id === params.user_id
     ) ?? null
   );
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export async function dbGetPasswordReset(email: string): Promise<PasswordResetRow | null> {
+  const db = await readDb();
+  const e = normalizeEmail(email);
+  return db.password_resets.find((r) => r.email === e) ?? null;
+}
+
+export async function dbUpsertPasswordResetOtp(params: {
+  email: string;
+  otpHash: string;
+  otpExpiresAt: string;
+  lastOtpSentAt: string;
+  otpSendCount: number;
+}): Promise<void> {
+  const db = await readDb();
+  const e = normalizeEmail(params.email);
+  const now = new Date().toISOString();
+  const idx = db.password_resets.findIndex((r) => r.email === e);
+  const row: PasswordResetRow = {
+    email: e,
+    otp_hash: params.otpHash,
+    otp_expires_at: params.otpExpiresAt,
+    otp_attempts: 0,
+    last_otp_sent_at: params.lastOtpSentAt,
+    otp_send_count: params.otpSendCount,
+    reset_token_hash: null,
+    reset_token_expires_at: null,
+    updated_at: now,
+  };
+  if (idx >= 0) {
+    db.password_resets[idx] = row;
+  } else {
+    db.password_resets.push(row);
+  }
+  await writeDb(db);
+}
+
+export async function dbIncrementPasswordResetOtpAttempts(email: string): Promise<number> {
+  const db = await readDb();
+  const e = normalizeEmail(email);
+  const row = db.password_resets.find((r) => r.email === e);
+  if (!row) return 0;
+  row.otp_attempts += 1;
+  row.updated_at = new Date().toISOString();
+  await writeDb(db);
+  return row.otp_attempts;
+}
+
+export async function dbSetPasswordResetToken(params: {
+  email: string;
+  resetTokenHash: string;
+  resetTokenExpiresAt: string;
+}): Promise<void> {
+  const db = await readDb();
+  const e = normalizeEmail(params.email);
+  const row = db.password_resets.find((r) => r.email === e);
+  if (!row) return;
+  row.reset_token_hash = params.resetTokenHash;
+  row.reset_token_expires_at = params.resetTokenExpiresAt;
+  row.otp_hash = "";
+  row.otp_expires_at = new Date(0).toISOString();
+  row.updated_at = new Date().toISOString();
+  await writeDb(db);
+}
+
+export async function dbDeletePasswordReset(email: string): Promise<void> {
+  const db = await readDb();
+  const e = normalizeEmail(email);
+  db.password_resets = db.password_resets.filter((r) => r.email !== e);
+  await writeDb(db);
+}
+
+export async function dbUpdateUserPassword(
+  userId: string,
+  passwordHash: string
+): Promise<DbUser | null> {
+  const db = await readDb();
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) return null;
+  user.passwordHash = passwordHash;
+  await writeDb(db);
+  return normalizeUser(user);
 }
 

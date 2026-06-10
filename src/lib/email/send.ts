@@ -10,37 +10,74 @@ export type SendEmailResult = {
   error?: string;
 };
 
-function fromAddress(): string {
+const RESEND_FALLBACK_FROM = "Luberry AI <onboarding@resend.dev>";
+
+/** Domains Resend will not accept as a custom From (must verify your own domain instead). */
+const UNVERIFIED_FROM_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+  "live.com",
+  "icloud.com",
+]);
+
+function extractEmailAddress(from: string): string {
+  const match = from.match(/<([^>]+)>/);
+  return (match?.[1] ?? from).trim();
+}
+
+function configuredFromAddress(): string {
   return (
     process.env.EMAIL_FROM?.trim() ||
     process.env.RESEND_FROM?.trim() ||
-    "Luberry AI <onboarding@luberry.ai>"
+    RESEND_FALLBACK_FROM
   );
+}
+
+function resendFromCandidates(): string[] {
+  const configured = configuredFromAddress();
+  const domain = extractEmailAddress(configured).split("@")[1]?.toLowerCase() ?? "";
+  if (UNVERIFIED_FROM_DOMAINS.has(domain)) {
+    return [RESEND_FALLBACK_FROM];
+  }
+  return [configured, RESEND_FALLBACK_FROM];
 }
 
 async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return { ok: false, provider: "resend", error: "RESEND_API_KEY not set" };
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: fromAddress(),
-      to: [params.to],
-      subject: params.subject,
-      html: params.html,
-    }),
-  });
+  let lastError = "Resend request failed";
+  for (const from of resendFromCandidates()) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [params.to],
+        subject: params.subject,
+        html: params.html,
+      }),
+    });
 
-  if (!res.ok) {
+    if (res.ok) return { ok: true, provider: "resend" };
+
     const text = await res.text();
-    return { ok: false, provider: "resend", error: text.slice(0, 400) };
+    lastError = text.slice(0, 400);
+    const domainRejected =
+      res.status === 403 &&
+      (text.includes("domain is not verified") || text.includes("validation_error"));
+    if (!domainRejected) {
+      return { ok: false, provider: "resend", error: lastError };
+    }
   }
-  return { ok: true, provider: "resend" };
+
+  return { ok: false, provider: "resend", error: lastError };
 }
 
 async function sendViaSmtp(params: SendEmailParams): Promise<SendEmailResult> {
@@ -61,7 +98,7 @@ async function sendViaSmtp(params: SendEmailParams): Promise<SendEmailResult> {
       auth: { user, pass },
     });
     await transport.sendMail({
-      from: fromAddress(),
+      from: configuredFromAddress(),
       to: params.to,
       subject: params.subject,
       html: params.html,
@@ -91,9 +128,11 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   }
 
   if (process.env.NODE_ENV === "development") {
+    const otpMatch = params.html.match(/>(\d{6})</);
     console.log("[Luberry AI email — dev mode]", {
       to: params.to,
       subject: params.subject,
+      ...(otpMatch ? { otp: otpMatch[1] } : {}),
       preview: params.html.slice(0, 200),
     });
     return { ok: true, provider: "console" };
