@@ -17,18 +17,18 @@ export default function LoginPage() {
               "-ml-2 text-muted-foreground"
             )}
           >
-            ← Aether OS
+            ← Luberry AI
           </Link>
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.3em] text-muted-foreground">
               Secure access
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-              Authenticate once. Launch everywhere.
+              Your AI business empire awaits.
             </h1>
             <p className="mt-4 text-muted-foreground">
-              Sessions are handled with Supabase SSR cookies so protected routes
-              stay in sync between the marketing site and your operator console.
+              Sign in to access your Luberry AI dashboard — agents, revenue analytics,
+              and growth tools in one premium platform.
             </p>
           </div>
         </div>

@@ -65,12 +65,12 @@ export function PaymentMethodPanel() {
   const configured = status?.gateways[method]?.configured ?? false;
 
   return (
-    <Card className="relative overflow-hidden border-violet-500/20 bg-gradient-to-b from-zinc-950/90 via-black/70 to-violet-950/20 shadow-[0_0_50px_-18px_rgba(139,92,246,0.25)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute -right-16 top-0 size-48 rounded-full bg-violet-600/15 blur-3xl" />
+    <Card className="relative overflow-hidden border-amber-500/20 bg-gradient-to-b from-zinc-950/90 via-black/70 to-amber-950/15 shadow-[0_0_50px_-18px_rgba(212,175,55,0.2)] backdrop-blur-xl">
+      <div className="pointer-events-none absolute -right-16 top-0 size-48 rounded-full bg-amber-600/10 blur-3xl" />
       <CardHeader className="relative">
         <CardTitle className="flex items-center gap-3 text-xl font-bold text-white md:text-2xl">
-          <span className="flex size-10 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-500/15">
-            <ShieldCheck className="size-5 text-violet-200" aria-hidden />
+          <span className="flex size-10 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/15">
+            <ShieldCheck className="size-5 text-amber-200" aria-hidden />
           </span>
           Settlement rails
         </CardTitle>
@@ -159,8 +159,12 @@ export function PaymentMethodPanel() {
 
         <p className="text-xs leading-relaxed text-muted-foreground">
           PayFast fits South African checkout; Paystack covers cards and bank
-          rails across Africa. Wire your server SDKs behind this selection —
-          this UI never moves money on its own.
+          rails across Africa. This dashboard records gross, platform fee, and
+          net in your ledger when you wire real webhooks (PayFast ITN / Paystack
+          charge.success) to your server. To land your cut in your own bank
+          balance, configure Paystack split/subaccounts or PayFast split rules in
+          the gateway dashboard—otherwise funds settle to the merchant account
+          that owns the keys.
         </p>
       </CardContent>
     </Card>

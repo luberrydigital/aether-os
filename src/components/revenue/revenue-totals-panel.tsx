@@ -10,34 +10,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { PayoutRow } from "@/lib/payments/mock-payouts";
+import type {
+  RevenueLogRow,
+  RevenueTotals,
+} from "@/components/revenue-dashboard-client";
 
 type Props = {
-  payouts: PayoutRow[];
-  platformFeeRate: number;
+  totals: RevenueTotals | null;
+  logs: RevenueLogRow[];
+  loading: boolean;
 };
 
-export function RevenueTotalsPanel({ payouts, platformFeeRate }: Props) {
-  const { gross, fee, net } = useMemo(() => {
-    let grossZar = 0;
-    let grossUsd = 0;
-    let feeZar = 0;
-    let feeUsd = 0;
-    for (const p of payouts) {
-      if (p.currency === "ZAR") {
-        grossZar += p.grossCents;
-        feeZar += p.platformFeeCents;
-      } else {
-        grossUsd += p.grossCents;
-        feeUsd += p.platformFeeCents;
-      }
-    }
-    return {
-      gross: { zar: grossZar, usd: grossUsd },
-      fee: { zar: feeZar, usd: feeUsd },
-      net: { zar: grossZar - feeZar, usd: grossUsd - feeUsd },
-    };
-  }, [payouts]);
+export function RevenueTotalsPanel({ totals, logs, loading }: Props) {
+  const latestFeeRate = useMemo(() => {
+    const r = logs[0]?.platform_fee_rate;
+    return typeof r === "number" && Number.isFinite(r) ? r : null;
+  }, [logs]);
 
   const zar = useMemo(
     () =>
@@ -58,33 +46,47 @@ export function RevenueTotalsPanel({ payouts, platformFeeRate }: Props) {
     []
   );
 
-  const pct = (platformFeeRate * 100).toFixed(1);
+  const feeLabel =
+    latestFeeRate == null ? "18–22%" : `${(latestFeeRate * 100).toFixed(1)}% (18–22% band)`;
 
   const spark = useMemo(() => {
-    let seed = 0;
-    for (const p of payouts) seed += p.grossCents;
+    // Draw from real data so the panel feels alive without faking money.
     const out: number[] = [];
-    let v = Math.abs(seed) % 97 || 41;
+    const take = logs.slice(0, 18).reverse();
     for (let i = 0; i < 18; i += 1) {
-      v = (v * 17 + 23) % 100;
-      out.push(25 + (v % 55));
+      const row = take[i];
+      const v = row ? Math.min(90, Math.max(18, Math.round((row.gross_cents / 1000) * 3))) : 22;
+      out.push(v);
     }
     return out;
-  }, [payouts]);
+  }, [logs]);
+
+  const gross = {
+    usd: totals?.revenue.usdCents ?? 0,
+    zar: totals?.revenue.zarCents ?? 0,
+  };
+  const fee = {
+    usd: totals?.platformFees.usdCents ?? 0,
+    zar: totals?.platformFees.zarCents ?? 0,
+  };
+  const net = {
+    usd: totals?.net.usdCents ?? 0,
+    zar: totals?.net.zarCents ?? 0,
+  };
 
   return (
-    <Card className="relative h-full overflow-hidden border-emerald-500/25 bg-gradient-to-b from-emerald-950/40 via-zinc-950/50 to-violet-950/25 shadow-[0_0_60px_-18px_rgba(52,211,153,0.25)] backdrop-blur-xl">
+    <Card className="relative h-full overflow-hidden border-amber-500/25 bg-gradient-to-b from-amber-950/30 via-zinc-950/50 to-black/30 shadow-[0_0_60px_-18px_rgba(212,175,55,0.2)] backdrop-blur-xl">
       <div className="pointer-events-none absolute -right-12 top-0 size-40 rounded-full bg-emerald-500/15 blur-3xl" />
       <CardHeader className="relative">
         <CardTitle className="flex flex-wrap items-center gap-3 text-xl font-bold text-white md:text-2xl">
           <span className="flex size-11 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/15">
             <Landmark className="size-6 text-emerald-300" aria-hidden />
           </span>
-          Treasury snapshot
+          Revenue breakdown
         </CardTitle>
         <CardDescription className="text-base text-zinc-400">
-          Aggregated from sandbox payout history. Platform fee applies on every
-          inflow (18–22% band).
+          Aggregated from your real ledger (`revenue_logs`). Platform fee is
+          auto-deducted per sale (18–22% band).
         </CardDescription>
       </CardHeader>
       <CardContent className="relative space-y-6">
@@ -92,13 +94,13 @@ export function RevenueTotalsPanel({ payouts, platformFeeRate }: Props) {
           <Percent className="size-5 text-amber-300" aria-hidden />
           <span className="text-sm font-medium text-zinc-400">Platform fee</span>
           <span className="font-mono text-3xl font-bold tabular-nums text-amber-100 md:text-4xl">
-            {pct}%
+            {feeLabel}
           </span>
         </div>
 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500">
-            Gross inflow (mock)
+            Gross inflow
           </p>
           <div className="mt-2 flex h-14 items-end gap-1">
             {spark.map((h, i) => (
@@ -147,6 +149,9 @@ export function RevenueTotalsPanel({ payouts, platformFeeRate }: Props) {
             + {usd.format(net.usd / 100)} USD rails
           </p>
         </div>
+        {loading ? (
+          <p className="text-xs text-zinc-500">Refreshing…</p>
+        ) : null}
       </CardContent>
     </Card>
   );

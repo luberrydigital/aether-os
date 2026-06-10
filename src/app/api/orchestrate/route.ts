@@ -1,5 +1,6 @@
 import { Command, INTERRUPT, isInterrupted } from "@langchain/langgraph";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import {
   finalizeOrchestrationCold,
   getOrchestrationGraph,
@@ -9,7 +10,11 @@ import type {
   OrchestrationPublicState,
   TreasuryResume,
 } from "@/lib/agents/orchestration-types";
-import { createClient } from "@/lib/supabase/server";
+import { getRouteSession } from "@/lib/auth/session";
+import {
+  dbGetOrchestrationSession,
+  dbUpsertOrchestrationSession,
+} from "@/lib/db/local-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,13 +32,11 @@ function readInterruptPayload(out: unknown): unknown {
   return first?.value;
 }
 
-export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function POST(request: NextRequest) {
+  const session = await getRouteSession(request);
+  const userId = session?.user?.id;
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -68,17 +71,13 @@ export async function POST(request: Request) {
           (snap?.values ?? out) as Record<string, unknown>
         );
         const interruptPayload = readInterruptPayload(out);
-        await supabase.from("orchestration_sessions").upsert(
-          {
-            thread_id: threadId,
-            user_id: user.id,
-            status: "awaiting_approval",
-            state: publicState,
-            interrupt: interruptPayload ?? null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "thread_id" }
-        );
+        await dbUpsertOrchestrationSession({
+          thread_id: threadId,
+          user_id: userId,
+          status: "awaiting_approval",
+          state: publicState,
+          interrupt: interruptPayload ?? null,
+        });
         return NextResponse.json({
           status: "awaiting_human_approval",
           threadId,
@@ -88,18 +87,14 @@ export async function POST(request: Request) {
       }
 
       const done = toPublicOrchestrationState(out as Record<string, unknown>);
-      await supabase.from("orchestration_sessions").upsert(
-        {
-          thread_id: threadId,
-          user_id: user.id,
-          status: "complete",
-          state: done,
-          result: done,
-          interrupt: null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "thread_id" }
-      );
+      await dbUpsertOrchestrationSession({
+        thread_id: threadId,
+        user_id: userId,
+        status: "complete",
+        state: done,
+        result: done,
+        interrupt: null,
+      });
 
       return NextResponse.json({
         status: "complete",
@@ -108,14 +103,8 @@ export async function POST(request: Request) {
         resumedVia: "langgraph",
       });
     } catch {
-      const { data: row, error: loadErr } = await supabase
-        .from("orchestration_sessions")
-        .select("state,status")
-        .eq("thread_id", threadId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (loadErr || !row || row.status !== "awaiting_approval") {
+      const row = await dbGetOrchestrationSession({ thread_id: threadId, user_id: userId });
+      if (!row || row.status !== "awaiting_approval") {
         return NextResponse.json(
           {
             error:
@@ -127,24 +116,20 @@ export async function POST(request: Request) {
 
       const base = row.state as OrchestrationPublicState;
       const merged = finalizeOrchestrationCold(base, resume);
-      await supabase.from("orchestration_sessions").upsert(
-        {
-          thread_id: threadId,
-          user_id: user.id,
-          status: "complete",
-          state: merged,
-          result: merged,
-          interrupt: null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "thread_id" }
-      );
+      await dbUpsertOrchestrationSession({
+        thread_id: threadId,
+        user_id: userId,
+        status: "complete",
+        state: merged,
+        result: merged,
+        interrupt: null,
+      });
 
       return NextResponse.json({
         status: "complete",
         threadId,
         state: merged,
-        resumedVia: "supabase_fallback",
+        resumedVia: "file_db_fallback",
       });
     }
   }
@@ -180,32 +165,13 @@ export async function POST(request: Request) {
     );
     const interruptPayload = readInterruptPayload(out);
 
-    const { error: persistErr } = await supabase
-      .from("orchestration_sessions")
-      .upsert(
-        {
-          thread_id: threadId,
-          user_id: user.id,
-          status: "awaiting_approval",
-          state: publicState,
-          interrupt: interruptPayload ?? null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "thread_id" }
-      );
-
-    if (persistErr) {
-      return NextResponse.json(
-        {
-          status: "awaiting_human_approval",
-          threadId,
-          interrupt: interruptPayload,
-          state: publicState,
-          warning: `Could not persist session (${persistErr.message}). Resume may require the same server instance or run supabase/migrations/20250418140000_orchestration_sessions.sql.`,
-        },
-        { status: 200 }
-      );
-    }
+    await dbUpsertOrchestrationSession({
+      thread_id: threadId,
+      user_id: userId,
+      status: "awaiting_approval",
+      state: publicState,
+      interrupt: interruptPayload ?? null,
+    });
 
     return NextResponse.json({
       status: "awaiting_human_approval",
@@ -216,18 +182,14 @@ export async function POST(request: Request) {
   }
 
   const complete = toPublicOrchestrationState(out as Record<string, unknown>);
-  await supabase.from("orchestration_sessions").upsert(
-    {
-      thread_id: threadId,
-      user_id: user.id,
-      status: "complete",
-      state: complete,
-      result: complete,
-      interrupt: null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "thread_id" }
-  );
+  await dbUpsertOrchestrationSession({
+    thread_id: threadId,
+    user_id: userId,
+    status: "complete",
+    state: complete,
+    result: complete,
+    interrupt: null,
+  });
 
   return NextResponse.json({
     status: "complete",

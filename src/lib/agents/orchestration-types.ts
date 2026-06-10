@@ -1,3 +1,29 @@
+export type PodHook = {
+  provider: "printful" | "printify" | null;
+  externalSku?: string | null;
+};
+
+export type StorefrontProductDesigner = {
+  title: string;
+  description: string;
+  priceCents: number;
+  currency: "USD" | "ZAR";
+  /** Prompt for AI image generation (OpenAI DALL·E when configured). */
+  imagePrompt: string;
+  tags: string[];
+  /** Phase 2: Print-on-demand integration (Printful / Printify). */
+  pod?: PodHook;
+};
+
+export type StorefrontDesignerPayload = {
+  /** URL-safe unique slug for /store/<slug> */
+  slug: string;
+  brandName: string;
+  headline: string;
+  description: string;
+  products: StorefrontProductDesigner[];
+};
+
 export type BusinessDesignerOutput = {
   businessName: string;
   tagline: string;
@@ -6,6 +32,8 @@ export type BusinessDesignerOutput = {
   offer: string;
   agentTeam: { name: string; mandate: string }[];
   risks: string[];
+  /** Present for ecommerce / DTC launches — drives real storefront + products. */
+  storefront?: StorefrontDesignerPayload | null;
 };
 
 export type MarketingSalesOutput = {
@@ -24,7 +52,7 @@ export type DeliveryFulfillmentOutput = {
 
 export type FinancePaymentOutput = {
   currency: "USD";
-  /** Gross revenue assumption for week 1 (mock). */
+  /** Gross revenue assumption for week 1 (planning estimate). */
   projectedWeekOneGross: number;
   /** Platform fee percentage (e.g. 0.20 for 20%). */
   platformFeeRate: number;
@@ -37,7 +65,8 @@ export type FinancePaymentOutput = {
 
 export type MonitorProfitOutput = {
   status: "live" | "blocked_pending_human" | "blocked_rejected";
-  mockEarningsPulse: string;
+  /** Human-readable monitor line (must not invent money). */
+  earningsPulse: string;
   rollingTotalUsd: number;
   lastUpdatedIso: string;
   alerts: string[];

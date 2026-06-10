@@ -29,6 +29,7 @@ type LaunchResponse = {
   agents?: unknown;
   narrative?: string;
   error?: string;
+  storefrontWarning?: string;
 };
 
 /** Minimal surface for Web Speech API (types vary by TS `lib` / browser). */
@@ -59,6 +60,9 @@ export function CreatorDashboard() {
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
   const [voicePulse, setVoicePulse] = useState(0);
   const [blueprint, setBlueprint] = useState<CreatorBlueprint | null>(null);
+  const [storefrontWarning, setStorefrontWarning] = useState<string | null>(
+    null
+  );
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
 
@@ -155,6 +159,7 @@ export function CreatorDashboard() {
     e.preventDefault();
     setError(null);
     setBlueprint(null);
+    setStorefrontWarning(null);
     setLoading(true);
     try {
       const res = await fetch("/api/launch", {
@@ -168,6 +173,9 @@ export function CreatorDashboard() {
       }
       if (data.blueprint) {
         setBlueprint(data.blueprint);
+      }
+      if (data.storefrontWarning) {
+        setStorefrontWarning(data.storefrontWarning);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Launch failed");
@@ -193,7 +201,7 @@ export function CreatorDashboard() {
             Drop one sentence. We spin up the company blueprint.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-pretty text-sm text-muted-foreground md:text-base">
-            Voice or keyboard — then Aether OS synthesizes your name, story,
+            Voice or keyboard — then Luberry AI synthesizes your name, story,
             autonomous agent roster, and a first-week revenue band you can take
             to investors or your team.
           </p>
@@ -270,6 +278,12 @@ export function CreatorDashboard() {
           </Alert>
         ) : null}
 
+        {storefrontWarning ? (
+          <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-100 backdrop-blur">
+            <AlertDescription>{storefrontWarning}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <div className="flex flex-col items-center gap-4">
           <Button
             type="submit"
@@ -325,6 +339,22 @@ export function CreatorDashboard() {
                 <p className="text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
                   {blueprint.description}
                 </p>
+                {blueprint.storefrontPath ? (
+                  <div className="mt-6 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-left">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-200/90">
+                      Live storefront
+                    </p>
+                    <Link
+                      href={blueprint.storefrontPath}
+                      className={cn(
+                        buttonVariants({ variant: "default", size: "sm" }),
+                        "mt-3 inline-flex bg-gradient-to-r from-violet-600 to-cyan-600 text-white"
+                      )}
+                    >
+                      Open {blueprint.storefrontSlug ?? "store"}
+                    </Link>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 

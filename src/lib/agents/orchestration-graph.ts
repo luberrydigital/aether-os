@@ -13,6 +13,7 @@ import {
   heuristicFinance,
   heuristicMarketingSales,
   heuristicMonitor,
+  isEcommerceSentence,
 } from "./orchestration-heuristics";
 import type {
   BusinessDesignerOutput,
@@ -22,9 +23,12 @@ import type {
   MarketingSalesOutput,
   MonitorProfitOutput,
   OrchestrationPublicState,
+  StorefrontDesignerPayload,
+  StorefrontProductDesigner,
   TreasuryInterruptPayload,
   TreasuryResume,
 } from "./orchestration-types";
+import { slugifyStoreSlug } from "@/lib/storefront/slug";
 
 const OrchestrationState = Annotation.Root({
   sentence: Annotation<string>(),
@@ -40,6 +44,96 @@ const OrchestrationState = Annotation.Root({
     default: () => [],
   }),
 });
+
+function coerceProductDesigner(
+  raw: unknown,
+  fallback: StorefrontProductDesigner
+): StorefrontProductDesigner {
+  if (!raw || typeof raw !== "object") return fallback;
+  const p = raw as Record<string, unknown>;
+  const title =
+    typeof p.title === "string" && p.title.trim() ? p.title.trim() : fallback.title;
+  const description =
+    typeof p.description === "string" && p.description.trim()
+      ? p.description.trim()
+      : fallback.description;
+  const priceCents = Number(p.priceCents);
+  const currency =
+    p.currency === "ZAR" || p.currency === "USD" ? p.currency : fallback.currency;
+  const imagePrompt =
+    typeof p.imagePrompt === "string" && p.imagePrompt.trim()
+      ? p.imagePrompt.trim()
+      : fallback.imagePrompt;
+  const tags = Array.isArray(p.tags)
+    ? p.tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    : fallback.tags;
+  let pod = fallback.pod;
+  if (p.pod && typeof p.pod === "object") {
+    const podRaw = p.pod as Record<string, unknown>;
+    const prov = podRaw.provider;
+    const provider =
+      prov === "printful" || prov === "printify" || prov === null ? prov : null;
+    pod = {
+      provider,
+      externalSku:
+        typeof podRaw.externalSku === "string" ? podRaw.externalSku : undefined,
+    };
+  }
+  return {
+    title,
+    description,
+    priceCents: Number.isFinite(priceCents) && priceCents >= 0 ? Math.round(priceCents) : fallback.priceCents,
+    currency,
+    imagePrompt,
+    tags: tags.length ? tags : fallback.tags,
+    pod,
+  };
+}
+
+function coerceStorefrontPayload(
+  raw: unknown,
+  sentence: string,
+  fallback: StorefrontDesignerPayload | null | undefined
+): StorefrontDesignerPayload | null {
+  if (!raw || typeof raw !== "object") return fallback ?? null;
+  const s = raw as Record<string, unknown>;
+  const slugIn = typeof s.slug === "string" ? s.slug : "";
+  const slug = slugifyStoreSlug(slugIn || fallback?.slug || "store");
+  const brandName =
+    typeof s.brandName === "string" && s.brandName.trim()
+      ? s.brandName.trim()
+      : fallback?.brandName ?? "Store";
+  const headline =
+    typeof s.headline === "string" && s.headline.trim()
+      ? s.headline.trim()
+      : fallback?.headline ?? brandName;
+  const description =
+    typeof s.description === "string" && s.description.trim()
+      ? s.description.trim()
+      : fallback?.description ?? sentence;
+
+  const fbProducts = fallback?.products ?? [];
+  const rawProducts = Array.isArray(s.products) ? s.products : [];
+  const products: StorefrontProductDesigner[] = [];
+  const count = Math.max(rawProducts.length, fbProducts.length, 1);
+  for (let i = 0; i < Math.min(count, 8); i += 1) {
+    const fbP =
+      fbProducts[i] ??
+      ({
+        title: `${brandName} Product ${i + 1}`,
+        description: "Launch SKU generated from your one-liner.",
+        priceCents: 4900 + i * 700,
+        currency: "USD" as const,
+        imagePrompt: `Premium product photo, ${brandName}, SKU ${i + 1}, studio lighting`,
+        tags: ["launch"],
+        pod: { provider: null },
+      } satisfies StorefrontProductDesigner);
+    const row = rawProducts[i];
+    products.push(coerceProductDesigner(row, fbP));
+  }
+  if (!products.length) return fallback ?? null;
+  return { slug, brandName, headline, description, products };
+}
 
 function coerceBusinessDesigner(
   raw: unknown,
@@ -69,6 +163,14 @@ function coerceBusinessDesigner(
   const risks = Array.isArray(o.risks)
     ? o.risks.filter((x): x is string => typeof x === "string")
     : fb.risks;
+
+  let storefront: StorefrontDesignerPayload | null | undefined;
+  if (o.storefront && typeof o.storefront === "object") {
+    storefront = coerceStorefrontPayload(o.storefront, sentence, fb.storefront ?? null);
+  } else if (isEcommerceSentence(sentence) || fb.storefront) {
+    storefront = fb.storefront ?? null;
+  }
+
   return {
     businessName: name,
     tagline,
@@ -77,6 +179,7 @@ function coerceBusinessDesigner(
     offer,
     agentTeam: safeTeam.length >= 3 ? safeTeam : fb.agentTeam,
     risks: risks.length ? risks : fb.risks,
+    storefront: storefront ?? null,
   };
 }
 
@@ -180,9 +283,31 @@ async function businessDesignerAgent(state: typeof OrchestrationState.State) {
     [
       {
         role: "system",
-        content: `You are the Business Designer Agent. Turn the founder's one-liner into a crisp business plan JSON with keys:
+        content: `You are the Business Designer Agent. Turn the founder's one-liner into a crisp business plan JSON.
+
+Always include these keys:
 businessName, tagline, executiveSummary, targetCustomer, offer, agentTeam (array of {name,mandate}), risks (string array of 2-4 items).
-Keep mandates short. No markdown.`,
+
+If the idea is ecommerce / DTC / merch / online shop / physical products (e.g. sell, store, shop, cart, SKU, Shopify, dropship, apparel, cosmetics, gadgets), ALSO include:
+storefront: {
+  slug: string (lowercase, letters/numbers/hyphens only, max 48 chars, unique-ish),
+  brandName: string,
+  headline: string,
+  description: string,
+  products: array of 3 to 6 items: {
+    title: string,
+    description: string (2-4 sentences),
+    priceCents: integer (e.g. 4999 = $49.99),
+    currency: "USD" or "ZAR",
+    imagePrompt: string (detailed prompt for a premium product photo; no text in image),
+    tags: string[],
+    pod: { "provider": null } OR { "provider": "printful"|"printify", "externalSku": string|null } — use provider null unless clearly print-on-demand.
+  }
+}
+
+If NOT ecommerce, set storefront to null.
+
+Keep mandates short. JSON only. No markdown.`,
       },
       { role: "user", content: state.sentence },
     ],
@@ -306,7 +431,7 @@ async function monitorProfitAgent(state: typeof OrchestrationState.State) {
       {
         role: "system",
         content: `You are the Monitor & Profit Agent. JSON only with keys:
-mockEarningsPulse (string like "$47 earned"), rollingTotalUsd (number), alerts (string array, 1-3 items), status ("live" if treasury approved else "blocked_rejected" or "blocked_pending_human").`,
+earningsPulse (string, must NOT invent money; e.g. "No sales logged yet" or "Last sale logged"), rollingTotalUsd (number, 0 if unknown), alerts (string array, 1-3 items), status ("live" if treasury approved else "blocked_rejected" or "blocked_pending_human").`,
       },
       {
         role: "user",
@@ -330,7 +455,7 @@ mockEarningsPulse (string like "$47 earned"), rollingTotalUsd (number), alerts (
   }
   const o = raw as Record<string, unknown>;
   const pulse =
-    typeof o.mockEarningsPulse === "string" ? o.mockEarningsPulse : fb.mockEarningsPulse;
+    typeof o.earningsPulse === "string" ? o.earningsPulse : fb.earningsPulse;
   const rolling = Number(o.rollingTotalUsd);
   const alerts = Array.isArray(o.alerts)
     ? o.alerts.filter((x): x is string => typeof x === "string")
@@ -344,7 +469,7 @@ mockEarningsPulse (string like "$47 earned"), rollingTotalUsd (number), alerts (
 
   return {
     monitorProfit: {
-      mockEarningsPulse: pulse,
+      earningsPulse: pulse,
       rollingTotalUsd: Number.isFinite(rolling) ? Math.round(rolling) : fb.rollingTotalUsd,
       alerts: alerts.length ? alerts : fb.alerts,
       status: forcedStatus,

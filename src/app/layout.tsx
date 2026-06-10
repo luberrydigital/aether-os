@@ -13,12 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aether OS — Autonomous AI Business Launcher",
+  title: "Luberry AI — AI Business Empire Platform",
   description:
-    "Describe an AI-native company in one sentence, orchestrate agents with LangGraph, and watch your cockpit come alive.",
+    "Own an AI company that works 24/7. Agent marketplace, auto social posting, competitor spy, and empire-grade analytics. Pro R299 · Elite R999 · Empire R2,999.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;

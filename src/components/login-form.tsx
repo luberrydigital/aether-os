@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -22,9 +22,12 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/launch";
 
+  const referralFromUrl = searchParams.get("ref") ?? "";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [referralCode, setReferralCode] = useState(referralFromUrl);
+  const [mode, setMode] = useState<"signin" | "signup">(referralFromUrl ? "signup" : "signin");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -32,30 +35,21 @@ export function LoginForm() {
     e.preventDefault();
     setMessage(null);
     setLoading(true);
-    const supabase = createClient();
 
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-          },
-        });
-        if (error) throw error;
-        setMessage(
-          "Check your email to confirm the account, then sign in here."
-        );
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        router.push(next);
-        router.refresh();
+      const res = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+        mode,
+        referralCode: mode === "signup" ? referralCode : undefined,
+      });
+      if (res?.error) {
+        setMessage(mode === "signup" ? "Sign up failed (email may already exist)." : "Sign in failed.");
+        return;
       }
+      router.push(next);
+      router.refresh();
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -67,11 +61,12 @@ export function LoginForm() {
     <Card className="w-full max-w-md border-border/60 bg-card/80 shadow-xl backdrop-blur">
       <CardHeader>
         <CardTitle className="text-2xl tracking-tight">
-          {mode === "signin" ? "Welcome back" : "Create your cockpit"}
+          {mode === "signin" ? "Welcome back" : "Join Luberry AI"}
         </CardTitle>
         <CardDescription>
-          Supabase email authentication. Use a strong password you have not
-          reused elsewhere.
+          {mode === "signin"
+            ? "Sign in to your Luberry AI dashboard."
+            : "Create your account and start building your AI business empire."}
         </CardDescription>
       </CardHeader>
       <form onSubmit={onSubmit}>
@@ -96,6 +91,18 @@ export function LoginForm() {
               placeholder="you@company.com"
             />
           </div>
+          {mode === "signup" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="referral">Referral code (optional)</Label>
+              <Input
+                id="referral"
+                type="text"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                placeholder="LUBXXXXX"
+              />
+            </div>
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="password">Password</Label>
             <Input
@@ -136,7 +143,7 @@ export function LoginForm() {
             href="/"
             className={cn(buttonVariants({ variant: "outline" }), "w-full")}
           >
-            Back to Aether OS
+            Back to Luberry AI
           </Link>
         </CardFooter>
       </form>

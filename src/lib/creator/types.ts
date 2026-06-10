@@ -14,6 +14,10 @@ export type CreatorBlueprint = {
     high: number;
     currency: "USD";
   };
+  /** Public storefront slug after ecommerce launch + DB insert. */
+  storefrontSlug?: string;
+  /** Path to the generated Next.js storefront route. */
+  storefrontPath?: string;
   /** Full multi-agent orchestration snapshot from launch (LLM + heuristics fallback). */
   orchestration?: OrchestrationPublicState;
 };

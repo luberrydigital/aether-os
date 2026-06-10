@@ -1,4 +1,4 @@
-export type PaymentGatewayId = "stripe" | "payfast" | "paystack";
+export type PaymentGatewayId = "payfast" | "paystack";
 
 export type PaymentGatewayMeta = {
   id: PaymentGatewayId;
@@ -17,17 +17,6 @@ export type PaymentGatewayMeta = {
 };
 
 export const PAYMENT_GATEWAYS: readonly PaymentGatewayMeta[] = [
-  {
-    id: "stripe",
-    label: "Stripe",
-    shortLabel: "International cards",
-    region: "International — Visa, Mastercard, Apple Pay, Google Pay (test mode)",
-    docsUrl: "https://stripe.com/docs/testing",
-    envKeys: ["STRIPE_PUBLISHABLE_KEY", "STRIPE_SECRET_KEY"],
-    testEnvTemplate: `# Stripe test — https://dashboard.stripe.com/test/apikeys
-STRIPE_PUBLISHABLE_KEY=pk_test_REPLACE_ME
-STRIPE_SECRET_KEY=sk_test_REPLACE_ME`,
-  },
   {
     id: "payfast",
     label: "PayFast",
@@ -55,7 +44,7 @@ PAYSTACK_SECRET_KEY=sk_test_REPLACE_ME`,
 
 export function gatewayMeta(id: PaymentGatewayId): PaymentGatewayMeta {
   const found = PAYMENT_GATEWAYS.find((g) => g.id === id);
-  if (!found) return PAYMENT_GATEWAYS[0];
+  if (!found) return PAYMENT_GATEWAYS[0]!;
   return found;
 }
 
@@ -66,9 +55,3 @@ export function paystackPublicKeyFromEnv(): string | undefined {
   return process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY?.trim();
 }
 
-/** Publishable key for Stripe; supports legacy NEXT_PUBLIC name. */
-export function stripePublishableKeyFromEnv(): string | undefined {
-  const k = process.env.STRIPE_PUBLISHABLE_KEY?.trim();
-  if (k) return k;
-  return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
-}

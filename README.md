@@ -1,6 +1,6 @@
 # Aether OS
 
-Single Next.js 15 app: marketing landing, Supabase-authenticated launch console, LangGraph multi-agent orchestration, and a mission-control dashboard with mock live revenue.
+Single Next.js 15 app: marketing landing, Supabase-authenticated launch console, LangGraph multi-agent orchestration, and a mission-control dashboard with real revenue from `revenue_logs`.
 
 ## Stack
 
@@ -55,11 +55,11 @@ npm run lint
 1. Landing page (`/`) introduces Aether OS and links to auth.
 2. `/login` — Supabase email sign-up / sign-in (SSR cookies via middleware).
 3. `/launch` — large prompt + **Launch My AI Company** → `POST /api/launch` runs the LangGraph pipeline and inserts a `companies` row.
-4. `/dashboard` — **Revenue dashboard**: live mock profit (USD + ZAR), agent roster with rotating “now doing” lines, totals with 18–22% platform fee, sandbox payout table, and a payment-method selector (PayFast, Paystack) wired for test keys via `/api/payments/status`.
+4. `/dashboard` — **Revenue dashboard**: live revenue + ledger from Supabase (`revenue_logs` + company totals), agent roster with rotating “now doing” lines, totals with 18–22% platform fee, and a payment-method selector (PayFast, Paystack) wired for test keys via `/api/payments/status`.
 
 ### Multi-agent orchestration API
 
-`POST /api/orchestrate` (authenticated) runs a **LangGraph** pipeline: Business Designer → Marketing & Sales → Delivery & Fulfillment → Finance & Payment (18–22% platform fee) → **human treasury interrupt** → Monitor & Profit (mock pulses like `$47 earned`). Optional **OpenAI** or **Anthropic (Claude)** keys make it model-agnostic (`LLM_PROVIDER` + `LLM_MODEL`); without keys, fast heuristics keep it reliable.
+`POST /api/orchestrate` (authenticated) runs a **LangGraph** pipeline: Business Designer → Marketing & Sales → Delivery & Fulfillment → Finance & Payment (18–22% platform fee) → **human treasury interrupt** → Monitor & Profit. Optional **OpenAI** or **Anthropic (Claude)** keys make it model-agnostic (`LLM_PROVIDER` + `LLM_MODEL`); without keys, fast heuristics keep it reliable.
 
 - **Start:** `{ "sentence": "…" }` — response includes `threadId` and, when the treasury gate fires, `status: "awaiting_human_approval"` plus `interrupt` and `state`.
 - **Resume:** `{ "threadId": "<uuid>", "resume": { "approved": true, "notes": "…" } }` — completes the graph when the in-process checkpointer still holds the thread; otherwise a **Supabase-backed fallback** finalizes the monitor stage from the stored snapshot (run the `orchestration_sessions` migration).
@@ -77,5 +77,5 @@ npm run lint
 
 ## Notes
 
-- Revenue numbers are simulated client-side for atmosphere; swap in real billing events when ready.
+- Revenue numbers come from the database ledger (`revenue_logs`). Use the **Simulate Real Sale** button on the dashboard to insert a real ledger row for testing.
 - `/api/launch` still uses the smaller graph plus creator blueprint; wire the UI to `/api/orchestrate` when you want the full treasury gate and agent roster end-to-end.

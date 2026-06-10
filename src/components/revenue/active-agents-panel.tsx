@@ -71,12 +71,12 @@ export function ActiveAgentsPanel({ agents }: { agents: DashboardAgent[] }) {
   }, [agents, pulse]);
 
   return (
-    <Card className="relative overflow-hidden border-cyan-500/20 bg-gradient-to-br from-zinc-950/80 via-black/60 to-violet-950/30 shadow-[0_0_60px_-20px_rgba(34,211,238,0.2)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-cyan-400/40 to-transparent" />
+    <Card className="relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-zinc-950/80 via-black/60 to-amber-950/20 shadow-[0_0_60px_-20px_rgba(212,175,55,0.15)] backdrop-blur-xl">
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-amber-400/40 to-transparent" />
       <CardHeader className="relative pl-1 md:pl-2">
         <CardTitle className="flex flex-wrap items-center gap-3 text-2xl font-bold text-white md:text-3xl">
-          <span className="flex size-11 items-center justify-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 shadow-[0_0_24px_-4px_rgba(34,211,238,0.35)]">
-            <Cpu className="size-6 text-cyan-300" aria-hidden />
+          <span className="flex size-11 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 shadow-[0_0_24px_-4px_rgba(212,175,55,0.3)]">
+            <Cpu className="size-6 text-amber-300" aria-hidden />
           </span>
           Agent activity mesh
         </CardTitle>
@@ -96,7 +96,7 @@ export function ActiveAgentsPanel({ agents }: { agents: DashboardAgent[] }) {
             {agents.map((agent, i) => (
               <li
                 key={agent.id}
-                className="group relative overflow-hidden rounded-2xl border border-white/[0.1] bg-black/45 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-violet-400/25 hover:shadow-[0_0_40px_-16px_rgba(139,92,246,0.25)]"
+                className="group relative overflow-hidden rounded-2xl border border-white/[0.1] bg-black/45 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-amber-400/25 hover:shadow-[0_0_40px_-16px_rgba(212,175,55,0.2)]"
               >
                 <div className="absolute right-4 top-4 flex items-center gap-1.5">
                   <span className="relative flex size-2.5">
@@ -108,7 +108,7 @@ export function ActiveAgentsPanel({ agents }: { agents: DashboardAgent[] }) {
                   </Badge>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pr-24">
-                  <Sparkles className="size-4 text-violet-400" aria-hidden />
+                  <Sparkles className="size-4 text-amber-400" aria-hidden />
                   <p className="text-lg font-semibold text-white">{agent.name}</p>
                   <Badge
                     variant="secondary"
@@ -120,11 +120,11 @@ export function ActiveAgentsPanel({ agents }: { agents: DashboardAgent[] }) {
                 <p className="mt-2 text-sm text-zinc-400 md:text-base">
                   {agent.mandate}
                 </p>
-                <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-950/20 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300/80">
+                <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/20 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/80">
                     Stream
                   </p>
-                  <p className="mt-1 font-mono text-sm font-medium text-cyan-100/95 md:text-base">
+                  <p className="mt-1 font-mono text-sm font-medium text-amber-100/95 md:text-base">
                     {activities[i]}
                   </p>
                 </div>

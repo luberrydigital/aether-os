@@ -4,7 +4,11 @@ import type {
   FinancePaymentOutput,
   MarketingSalesOutput,
   MonitorProfitOutput,
+  StorefrontDesignerPayload,
+  StorefrontProductDesigner,
+  PodHook,
 } from "./orchestration-types";
+import { defaultSlugFromSentence, slugifyStoreSlug } from "@/lib/storefront/slug";
 
 const STOP = new Set([
   "the",
@@ -68,6 +72,108 @@ const SUFFIXES = [
   "Nimbus Ops",
 ];
 
+export function isEcommerceSentence(sentence: string): boolean {
+  const s = sentence.toLowerCase();
+  const strong = [
+    "ecommerce",
+    "e-commerce",
+    "shopify",
+    "storefront",
+    "dropship",
+    "dropshipping",
+    "merch",
+    "t-shirt",
+    "tees",
+    "apparel",
+    "sneaker",
+    "jewelry",
+    "jewellery",
+    "cosmetic",
+    "skincare",
+    "supplement",
+    "gadget",
+    "earbuds",
+    "headphones",
+    "print on demand",
+    "pod ",
+    "woocommerce",
+    "bigcommerce",
+    "amazon fba",
+    "dtc",
+    "direct to consumer",
+  ];
+  if (strong.some((k) => s.includes(k))) return true;
+  const combo =
+    (s.includes("sell") && (s.includes("online") || s.includes("product"))) ||
+    (s.includes("shop") && s.includes("online")) ||
+    (s.includes("store") && (s.includes("open") || s.includes("launch")));
+  return combo;
+}
+
+function buildHeuristicStorefront(
+  sentence: string,
+  brandStem: string
+): StorefrontDesignerPayload {
+  const trimmed = sentence.trim();
+  const seed = hashSeed(trimmed);
+  const slug = defaultSlugFromSentence(trimmed);
+  const brand = titleCase(brandStem.split("—")[0]?.trim() || brandStem) || "AI Store";
+
+  const mkProduct = (
+    title: string,
+    desc: string,
+    priceCents: number,
+    currency: StorefrontProductDesigner["currency"],
+    imagePrompt: string,
+    tags: string[],
+    pod: PodHook
+  ): StorefrontProductDesigner => ({
+    title,
+    description: desc,
+    priceCents,
+    currency,
+    imagePrompt,
+    tags,
+    pod,
+  });
+
+  return {
+    slug: slugifyStoreSlug(slug),
+    brandName: brand,
+    headline: `${brand} — launch capsule`,
+    description: `A tight first collection inspired by: ${trimmed.slice(0, 180)}${trimmed.length > 180 ? "…" : ""}`,
+    products: [
+      mkProduct(
+        `${brand} Signature`,
+        "Hero SKU with premium positioning and repeatable packaging.",
+        4900 + (seed % 25) * 100,
+        "USD",
+        `Ultra-premium product photography, ${brand} hero product on matte black pedestal, soft rim light, 8k detail`,
+        ["signature", "hero"],
+        { provider: "printful", externalSku: "T-SHIRT" }
+      ),
+      mkProduct(
+        `${brand} Bundle`,
+        "Bundle SKU for higher AOV with clear savings story.",
+        8900 + (seed % 30) * 100,
+        "USD",
+        `Lifestyle flat lay bundle, ${brand} minimalist aesthetic, neutral tones, subtle reflections`,
+        ["bundle", "aov"],
+        { provider: "printful", externalSku: "HOODIE" }
+      ),
+      mkProduct(
+        `${brand} Limited`,
+        "Scarcity SKU for launch-week momentum (simulated inventory).",
+        12900 + (seed % 20) * 100,
+        "ZAR" as const,
+        `Editorial product shot, ${brand} limited drop vibe, neon accent, cinematic depth`,
+        ["limited", "drop"],
+        { provider: "printful", externalSku: "MUG" }
+      ),
+    ],
+  };
+}
+
 export function heuristicBusinessDesigner(
   sentence: string
 ): BusinessDesignerOutput {
@@ -81,7 +187,7 @@ export function heuristicBusinessDesigner(
       ? titleCase(meaningful.slice(0, 2).join(" "))
       : titleCase(trimmed.slice(0, 28).trim());
 
-  return {
+  const base: BusinessDesignerOutput = {
     businessName: `${stem} — ${suffix}`,
     tagline: "Autonomous revenue loops with human-grade taste.",
     executiveSummary: `${stem} packages your thesis into an AI-operated business: “${trimmed}”. The plan sequences wedge validation, agent orchestration, and a tight GTM cadence for the first 30 days.`,
@@ -118,6 +224,15 @@ export function heuristicBusinessDesigner(
       "Vendor concentration — keep secondary model path for failover.",
     ],
   };
+
+  if (isEcommerceSentence(trimmed)) {
+    return {
+      ...base,
+      storefront: buildHeuristicStorefront(trimmed, stem),
+    };
+  }
+
+  return base;
 }
 
 export function heuristicMarketingSales(
@@ -143,6 +258,19 @@ export function heuristicMarketingSales(
 
 export function heuristicDelivery(sentence: string): DeliveryFulfillmentOutput {
   const seed = hashSeed(sentence);
+  const hooks = [
+    "CRM webhook fan-out",
+    "Calendar + billing state machine",
+    "Slack / email escalation on SLA risk",
+  ];
+  if (isEcommerceSentence(sentence)) {
+    hooks.push(
+      "Printful integration hook (Phase 2): product sync + order fulfillment webhooks"
+    );
+    hooks.push(
+      "Printify integration hook (Phase 2): variant mapping + supplier routing"
+    );
+  }
   return {
     deliveryModel:
       seed % 2 === 0
@@ -155,11 +283,7 @@ export function heuristicDelivery(sentence: string): DeliveryFulfillmentOutput {
       "Quality gate + human spot-check",
       "Customer handoff + telemetry",
     ],
-    automationHooks: [
-      "CRM webhook fan-out",
-      "Calendar + billing state machine",
-      "Slack / email escalation on SLA risk",
-    ],
+    automationHooks: hooks,
   };
 }
 
@@ -187,39 +311,31 @@ export function heuristicMonitor(
   sentence: string,
   approval: "approved" | "rejected" | "pending"
 ): MonitorProfitOutput {
-  const seed = hashSeed(sentence + approval);
-  const pulse = ["$47 earned", "$83 earned", "$120 earned", "$199 earned"][
-    seed % 4
-  ];
-  const rolling = 420 + (seed % 2_800);
-
   if (approval === "rejected") {
     return {
       status: "blocked_rejected",
-      mockEarningsPulse: "$0 — treasury closed",
+      earningsPulse: "Treasury closed — no live money movement.",
       rollingTotalUsd: 0,
       lastUpdatedIso: new Date().toISOString(),
-      alerts: ["Human rejected treasury gate — mock earnings frozen."],
+      alerts: ["Human rejected treasury gate — revenue logging stays disabled."],
     };
   }
 
   if (approval === "pending") {
     return {
       status: "blocked_pending_human",
-      mockEarningsPulse: "$0 — awaiting approval",
+      earningsPulse: "Awaiting treasury approval — revenue logging disabled.",
       rollingTotalUsd: 0,
       lastUpdatedIso: new Date().toISOString(),
-      alerts: ["Treasury gate open — confirm before simulating payouts."],
+      alerts: ["Treasury gate open — approve before enabling live money movement."],
     };
   }
 
   return {
     status: "live",
-    mockEarningsPulse: pulse,
-    rollingTotalUsd: rolling,
+    earningsPulse: "Live — revenue is sourced from your database ledger.",
+    rollingTotalUsd: 0,
     lastUpdatedIso: new Date().toISOString(),
-    alerts: [
-      "Synthetic telemetry only — swap for PayFast / Paystack webhooks when live.",
-    ],
+    alerts: ["Connect gateway webhooks to log real sales into revenue_logs."],
   };
 }

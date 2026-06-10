@@ -1,39 +1,16 @@
 import { NextResponse } from "next/server";
-import { paystackPublicKeyFromEnv, stripePublishableKeyFromEnv } from "@/lib/payments/gateways";
-import { createClient } from "@/lib/supabase/server";
+import { getPaymentsGatewayFlags } from "@/lib/env/env-status";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  // Public: only exposes whether keys exist (no secrets). Dashboard and docs UIs use this.
+  const p = getPaymentsGatewayFlags();
   return NextResponse.json({
-    sandbox: true,
+    sandbox: p.sandbox,
     gateways: {
-      stripe: {
-        configured: Boolean(
-          stripePublishableKeyFromEnv() && process.env.STRIPE_SECRET_KEY
-        ),
-      },
-      payfast: {
-        configured: Boolean(
-          process.env.PAYFAST_MERCHANT_ID &&
-            process.env.PAYFAST_MERCHANT_KEY &&
-            process.env.PAYFAST_PASSPHRASE
-        ),
-      },
-      paystack: {
-        configured: Boolean(
-          paystackPublicKeyFromEnv() && process.env.PAYSTACK_SECRET_KEY
-        ),
-      },
+      payfast: p.payfast,
+      paystack: p.paystack,
     },
   });
 }

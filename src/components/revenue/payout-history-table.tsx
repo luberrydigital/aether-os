@@ -18,14 +18,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { PayoutRow } from "@/lib/payments/mock-payouts";
-import { gatewayMeta } from "@/lib/payments/gateways";
+import { gatewayMeta, type PaymentGatewayId } from "@/lib/payments/gateways";
+import type { RevenueLogRow } from "@/components/revenue-dashboard-client";
 
 type Props = {
-  payouts: PayoutRow[];
+  logs: RevenueLogRow[];
+  loading: boolean;
 };
 
-export function PayoutHistoryTable({ payouts }: Props) {
+export function PayoutHistoryTable({ logs, loading }: Props) {
   const zar = useMemo(
     () =>
       new Intl.NumberFormat("en-ZA", {
@@ -45,8 +46,13 @@ export function PayoutHistoryTable({ payouts }: Props) {
     []
   );
 
-  const fmt = (row: PayoutRow, cents: number) =>
+  const fmt = (row: RevenueLogRow, cents: number) =>
     row.currency === "ZAR" ? zar.format(cents / 100) : usd.format(cents / 100);
+
+  function gatewayDisplayName(id: string): string {
+    if (id === "payfast" || id === "paystack") return gatewayMeta(id as PaymentGatewayId).label;
+    return id;
+  }
 
   return (
     <Card className="relative overflow-hidden border-fuchsia-500/15 bg-gradient-to-br from-zinc-950/90 via-black/60 to-fuchsia-950/20 shadow-[0_0_60px_-20px_rgba(192,38,211,0.15)] backdrop-blur-xl">
@@ -56,11 +62,11 @@ export function PayoutHistoryTable({ payouts }: Props) {
           <span className="flex size-10 items-center justify-center rounded-xl border border-fuchsia-500/25 bg-fuchsia-500/10">
             <Table2 className="size-5 text-fuchsia-200" aria-hidden />
           </span>
-          Payout ledger
+          Revenue ledger
         </CardTitle>
         <CardDescription className="text-base text-zinc-400">
-          Gross inflow, Aether OS platform fee (18–22%), and net to you — all{" "}
-          <span className="font-medium text-zinc-200">sandbox</span> for now.
+          Every sale is written to <span className="font-mono">revenue_logs</span>{" "}
+          with the platform fee deducted (18–22%).
         </CardDescription>
       </CardHeader>
       <CardContent className="relative overflow-x-auto">
@@ -73,48 +79,53 @@ export function PayoutHistoryTable({ payouts }: Props) {
               <TableHead>Fee %</TableHead>
               <TableHead>Platform fee</TableHead>
               <TableHead>Net</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Type</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {payouts.map((row) => (
+            {logs.map((row) => (
               <TableRow
                 key={row.id}
                 className="border-white/10 transition hover:bg-white/[0.04]"
               >
                 <TableCell className="whitespace-normal text-muted-foreground">
-                  {new Date(row.at).toLocaleString()}
+                  {new Date(row.created_at).toLocaleString()}
                 </TableCell>
                 <TableCell className="whitespace-normal">
-                  <div className="font-medium">{gatewayMeta(row.gateway).label}</div>
+                  <div className="font-medium">{gatewayDisplayName(row.gateway)}</div>
                   <div className="text-xs text-muted-foreground">
-                    {row.reference}
+                    {row.reference ?? "—"}
                   </div>
                 </TableCell>
                 <TableCell className="font-mono text-sm">
-                  {fmt(row, row.grossCents)}
+                  {fmt(row, row.gross_cents)}
                 </TableCell>
                 <TableCell className="font-mono text-amber-200">
-                  {(row.platformFeeRate * 100).toFixed(1)}%
+                  {(row.platform_fee_rate * 100).toFixed(1)}%
                 </TableCell>
                 <TableCell className="font-mono text-sm text-amber-100/90">
-                  {fmt(row, row.platformFeeCents)}
+                  {fmt(row, row.platform_fee_cents)}
                 </TableCell>
                 <TableCell className="font-mono text-sm text-emerald-300">
-                  {fmt(row, row.netCents)}
+                  {fmt(row, row.net_cents)}
                 </TableCell>
                 <TableCell>
                   <Badge
-                    variant={
-                      row.status === "sandbox_settled" ? "secondary" : "outline"
-                    }
+                    variant={row.note?.includes("Simulated") ? "outline" : "secondary"}
                     className="capitalize"
                   >
-                    {row.status.replaceAll("_", " ")}
+                    {row.note?.includes("Simulated") ? "simulated sale" : "sale"}
                   </Badge>
                 </TableCell>
               </TableRow>
             ))}
+            {logs.length === 0 ? (
+              <TableRow className="border-white/10">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-zinc-500">
+                  {loading ? "Loading revenue logs…" : "No revenue yet. Click “Simulate Real Sale” to generate a real ledger entry."}
+                </TableCell>
+              </TableRow>
+            ) : null}
           </TableBody>
         </Table>
       </CardContent>
